@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TermSender Pro - Email Campaign Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <i class="fas fa-paper-plane"></i>
+                    <span>TermSender Pro</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>Ready</span>
+                </div>
+                <button class="btn btn-secondary" id="settingsBtn">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Settings Modal -->
+        <div class="modal" id="settingsModal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Application Settings</h3>
+                    <button class="modal-close" id="closeSettingsModal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Theme</label>
+                            <select id="appTheme">
+                                <option value="dark" selected>Dark</option>
+                                <option value="light">Light</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Notifications</label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="enableToasts" checked>
+                                <span class="checkmark"></span>
+                                Enable toast notifications
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" id="resetSettingsBtn">
+                        <i class="fas fa-undo"></i>
+                        Reset Defaults
+                    </button>
+                    <button class="btn btn-primary" id="saveSettingsBtn">
+                        <i class="fas fa-save"></i>
+                        Save Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <nav class="nav-menu">
+                    <button class="nav-item active" data-section="dashboard">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span>Dashboard</span>
+                    </button>
+                    <button class="nav-item" data-section="smtp">
+                        <i class="fas fa-server"></i>
+                        <span>SMTP Config</span>
+                    </button>
+                    <button class="nav-item" data-section="recipients">
+                        <i class="fas fa-users"></i>
+                        <span>Recipients</span>
+                    </button>
+                    <button class="nav-item" data-section="compose">
+                        <i class="fas fa-edit"></i>
+                        <span>Compose</span>
+                    </button>
+                    <button class="nav-item" data-section="attachments">
+                        <i class="fas fa-paperclip"></i>
+                        <span>Attachments</span>
+                    </button>
+                    <button class="nav-item" data-section="send">
+                        <i class="fas fa-rocket"></i>
+                        <span>Launch</span>
+                    </button>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <div class="campaign-stats">
+                        <div class="stat">
+                            <span class="stat-label">Total Recipients</span>
+                            <span class="stat-value" id="totalRecipients">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Ready to Send</span>
+                            <span class="stat-value" id="readyToSend">No</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Content Area -->
+            <div class="content-area">
+                <!-- Dashboard Section -->
+                <section id="dashboard" class="content-section active">
+                    <div class="section-header">
+                        <h2>Campaign Dashboard</h2>
+                        <p>Professional email campaign management made effortless</p>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="card-icon smtp-icon">
+                                <i class="fas fa-server"></i>
+                            </div>
+                            <div class="card-content">
+                                <h3>SMTP Configuration</h3>
+                                <p>Configure your email server settings</p>
+                                <div class="card-status" id="smtpStatus">
+                                    <i class="fas fa-circle status-pending"></i>
+                                    <span>Not Configured</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-card">
+                            <div class="card-icon recipients-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="card-content">
+                                <h3>Recipients</h3>
+                                <p>Import and manage your email lists</p>
+                                <div class="card-status" id="recipientsStatus">
+                                    <i class="fas fa-circle status-pending"></i>
+                                    <span>0 Recipients</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-card">
+                            <div class="card-icon compose-icon">
+                                <i class="fas fa-edit"></i>
+                            </div>
+                            <div class="card-content">
+                                <h3>Email Content</h3>
+                                <p>Compose your email message</p>
+                                <div class="card-status" id="composeStatus">
+                                    <i class="fas fa-circle status-pending"></i>
+                                    <span>Not Composed</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-card">
+                            <div class="card-icon send-icon">
+                                <i class="fas fa-rocket"></i>
+                            </div>
+                            <div class="card-content">
+                                <h3>Launch Campaign</h3>
+                                <p>Send your email campaign</p>
+                                <div class="card-status" id="launchStatus">
+                                    <i class="fas fa-circle status-pending"></i>
+                                    <span>Not Ready</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="recent-activity">
+                        <h3>Recent Activity</h3>
+                        <div class="activity-list" id="activityList">
+                            <div class="activity-item">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Welcome to TermSender Pro - Start by configuring your SMTP settings</span>
+                                <time class="activity-time">Now</time>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SMTP Configuration Section -->
+                <section id="smtp" class="content-section">
+                    <div class="section-header">
+                        <h2>SMTP Configuration & Rotation</h2>
+                        <p>Configure multiple SMTP servers with intelligent rotation for maximum deliverability</p>
+                    </div>
+
+                    <div class="smtp-container">
+                        <!-- SMTP Servers List -->
+                        <div class="smtp-servers-section">
+                            <div class="smtp-servers-header">
+                                <h3>SMTP Servers</h3>
+                                <button type="button" class="btn btn-primary" id="addSmtpBtn">
+                                    <i class="fas fa-plus"></i>
+                                    Add SMTP Server
+                                </button>
+                            </div>
+                            
+                            <div class="smtp-servers-list" id="smtpServersList">
+                                <div class="empty-state">
+                                    <i class="fas fa-server"></i>
+                                    <p>No SMTP servers configured</p>
+                                    <button class="btn btn-outline" id="addFirstSmtpBtn">Add Your First SMTP Server</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Rotation Settings -->
+                        <div class="rotation-settings-section">
+                            <h3>Rotation Settings</h3>
+                            <div class="settings-grid">
+                                <div class="setting-group">
+                                    <label>Rotation Mode</label>
+                                    <select id="rotationMode">
+                                        <option value="email_count">By Email Count</option>
+                                        <option value="time_based">By Time Duration</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="setting-group" id="emailCountSetting">
+                                    <label for="emailsPerRotation">Emails per Rotation</label>
+                                    <input type="number" id="emailsPerRotation" value="10" min="1" max="100">
+                                    <small>Switch SMTP after N emails</small>
+                                </div>
+                                
+                                <div class="setting-group" id="timeDurationSetting" style="display: none;">
+                                    <label for="secondsPerRotation">Seconds per Rotation</label>
+                                    <input type="number" id="secondsPerRotation" value="30" min="5" max="300">
+                                    <small>Switch SMTP after N seconds</small>
+                                </div>
+                                
+                                <div class="setting-group">
+                                    <label for="delayBetweenEmails">Delay Between Emails (seconds)</label>
+                                    <input type="number" id="delayBetweenEmails" value="1" min="0.5" max="10" step="0.5">
+                                    <small>Recommended: 1-3 seconds</small>
+                                </div>
+                                
+                                <div class="setting-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="enableFailover" checked>
+                                        <span class="checkmark"></span>
+                                        Enable Automatic Failover
+                                    </label>
+                                    <small>Automatically switch to next server if one fails</small>
+                                </div>
+                                
+                                <div class="setting-group">
+                                    <label for="maxRetries">Max Retries per Server</label>
+                                    <input type="number" id="maxRetries" value="3" min="1" max="10">
+                                    <small>Retry attempts before switching server</small>
+                                </div>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-secondary" id="testAllSmtpBtn">
+                                    <i class="fas fa-vial"></i>
+                                    Test All Servers
+                                </button>
+                                <button type="button" class="btn btn-primary" id="saveRotationBtn">
+                                    <i class="fas fa-save"></i>
+                                    Save Rotation Settings
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SMTP Server Modal -->
+                    <div class="modal" id="smtpModal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3 id="smtpModalTitle">Add SMTP Server</h3>
+                                <button class="modal-close" id="closeSmtpModal">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="smtpForm">
+                                    <div class="form-grid">
+                                        <div class="form-group">
+                                            <label for="smtpName">Server Name</label>
+                                            <input type="text" id="smtpName" placeholder="Gmail Primary" required>
+                                            <small>Friendly name for this SMTP server</small>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="smtpHost">SMTP Host</label>
+                                            <input type="text" id="smtpHost" placeholder="smtp.gmail.com" required>
+                                            <small>Your email provider's SMTP server</small>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="smtpPort">Port</label>
+                                            <input type="number" id="smtpPort" value="587" required>
+                                            <small>Usually 587 for TLS or 465 for SSL</small>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="smtpUsername">Username/Email</label>
+                                            <input type="email" id="smtpUsername" placeholder="your@email.com" required>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="smtpPassword">Password</label>
+                                            <input type="password" id="smtpPassword" placeholder="App password or email password" required>
+                                            <small>Use app passwords for Gmail/Outlook</small>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="senderEmail">Sender Email</label>
+                                            <input type="email" id="senderEmail" placeholder="sender@domain.com" required>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="maxEmailsPerHour">Max Emails per Hour</label>
+                                            <input type="number" id="maxEmailsPerHour" value="300" min="1" max="1000">
+                                            <small>Rate limit for this server</small>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="smtpPriority">Priority</label>
+                                            <input type="number" id="smtpPriority" value="1" min="1" max="10">
+                                            <small>Lower number = higher priority</small>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label>Encryption</label>
+                                            <div class="radio-group">
+                                                <label class="radio-label">
+                                                    <input type="radio" name="encryptionMode" id="encryptionTLS" value="tls" checked>
+                                                    <span class="radio-mark"></span>
+                                                    TLS (587)
+                                                </label>
+                                                <label class="radio-label" style="margin-left: 12px;">
+                                                    <input type="radio" name="encryptionMode" id="encryptionSSL" value="ssl">
+                                                    <span class="radio-mark"></span>
+                                                    SSL (465)
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="smtpEnabled" checked>
+                                                <span class="checkmark"></span>
+                                                Enable This Server
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="modal-actions">
+                                        <button type="button" class="btn btn-secondary" id="testSmtpBtn">
+                                            <i class="fas fa-vial"></i>
+                                            Test Connection
+                                        </button>
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-save"></i>
+                                            Save SMTP Server
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Recipients Section -->
+                <section id="recipients" class="content-section">
+                    <div class="section-header">
+                        <h2>Recipient Management</h2>
+                        <p>Import email lists and manage your recipients</p>
+                    </div>
+
+                    <div class="recipients-container">
+                        <div class="import-methods">
+                            <div class="import-card">
+                                <div class="import-header">
+                                    <i class="fas fa-file-csv"></i>
+                                    <h3>CSV Import</h3>
+                                </div>
+                                <div class="file-drop-zone" id="csvDropZone">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <p>Drop your CSV file here or click to browse</p>
+                                    <input type="file" id="csvFileInput" accept=".csv" hidden>
+                                    <button class="btn btn-outline" id="csvBrowseBtn">Browse Files</button>
+                                </div>
+                            </div>
+
+                            <div class="import-card">
+                                <div class="import-header">
+                                    <i class="fas fa-keyboard"></i>
+                                    <h3>Manual Entry</h3>
+                                </div>
+                                <div class="manual-entry">
+                                    <textarea id="manualEmails" placeholder="Enter email addresses, one per line or comma-separated"></textarea>
+                                    <button class="btn btn-primary" id="addManualBtn">
+                                        <i class="fas fa-plus"></i>
+                                        Add Emails
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="recipients-list">
+                            <div class="list-header">
+                                <h3>Recipients List</h3>
+                                <div class="list-actions">
+                                    <button class="btn btn-secondary" id="validateEmailsBtn">
+                                        <i class="fas fa-check-circle"></i>
+                                        Validate All
+                                    </button>
+                                    <button class="btn btn-danger" id="clearRecipientsBtn">
+                                        <i class="fas fa-trash"></i>
+                                        Clear All
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="recipients-table-container">
+                                <table class="recipients-table" id="recipientsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Email</th>
+                                            <th>Status</th>
+                                            <th>Additional Data</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="empty-state">
+                                            <td colspan="4">
+                                                <div class="empty-content">
+                                                    <i class="fas fa-user-plus"></i>
+                                                    <p>No recipients added yet</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Compose Section -->
+                <section id="compose" class="content-section">
+                    <div class="section-header">
+                        <h2>Compose Email</h2>
+                        <p>Create your email content with rich formatting</p>
+                    </div>
+
+                    <div class="compose-container">
+                        <form id="composeForm">
+                            <div class="compose-form">
+                                <div class="form-group">
+                                    <label for="emailSubject">Subject Line</label>
+                                    <input type="text" id="emailSubject" placeholder="Enter your email subject" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Email Format</label>
+                                    <div class="format-tabs">
+                                        <button type="button" class="format-tab active" data-format="html">
+                                            <i class="fas fa-code"></i>
+                                            HTML
+                                        </button>
+                                        <button type="button" class="format-tab" data-format="plain">
+                                            <i class="fas fa-align-left"></i>
+                                            Plain Text
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="emailBody">Email Content</label>
+                                    <div class="editor-container">
+                                        <div class="editor-toolbar" id="editorToolbar">
+                                            <button type="button" class="toolbar-btn" data-action="bold">
+                                                <i class="fas fa-bold"></i>
+                                            </button>
+                                            <button type="button" class="toolbar-btn" data-action="italic">
+                                                <i class="fas fa-italic"></i>
+                                            </button>
+                                            <button type="button" class="toolbar-btn" data-action="underline">
+                                                <i class="fas fa-underline"></i>
+                                            </button>
+                                            <span class="toolbar-separator"></span>
+                                            <button type="button" class="toolbar-btn" data-action="insertUnorderedList">
+                                                <i class="fas fa-list-ul"></i>
+                                            </button>
+                                            <button type="button" class="toolbar-btn" data-action="insertOrderedList">
+                                                <i class="fas fa-list-ol"></i>
+                                            </button>
+                                            <span class="toolbar-separator"></span>
+                                            <button type="button" class="toolbar-btn" data-action="createLink">
+                                                <i class="fas fa-link"></i>
+                                            </button>
+                                            <button type="button" class="toolbar-btn" data-action="insertImage" title="Insert an inline image">
+                                                <i class="fas fa-image"></i>
+                                            </button>
+                                        </div>
+                                        <input type="file" id="inlineImageInput" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                                        <div class="editor" id="emailBody" contenteditable="true" data-placeholder="Enter your email content here..."></div>
+                                        <textarea id="emailBodyPlain" class="plain-editor" placeholder="Enter your plain text email content here..." style="display: none;"></textarea>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Email Preview</label>
+                                    <div class="preview-container">
+                                        <div class="preview-header">
+                                            <span class="preview-label">Subject:</span>
+                                            <span class="preview-subject" id="previewSubject">No subject</span>
+                                        </div>
+                                        <iframe class="preview-body" id="previewBody" title="Recipient email preview" sandbox="" referrerpolicy="no-referrer" srcdoc="<p>Start typing to see preview</p>"></iframe>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-secondary" id="saveTemplateBtn">
+                                    <i class="fas fa-save"></i>
+                                    Save as Template
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-check"></i>
+                                    Save Content
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Attachments Section -->
+                <section id="attachments" class="content-section">
+                    <div class="section-header">
+                        <h2>File Attachments</h2>
+                        <p>Add files to your email campaign</p>
+                    </div>
+
+                    <div class="attachments-container">
+                        <div class="upload-area">
+                            <div class="file-drop-zone large" id="attachmentDropZone">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <h3>Drop files here or click to browse</h3>
+                                <p>Supports: PDF, Images, Documents (Max 50MB)</p>
+                                <input type="file" id="attachmentFileInput" multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.txt" hidden>
+                                <button class="btn btn-primary" id="attachmentBrowseBtn">
+                                    <i class="fas fa-folder-open"></i>
+                                    Browse Files
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="attachments-list">
+                            <h3>Attached Files</h3>
+                            <div class="attachments-grid" id="attachmentsGrid">
+                                <div class="empty-state">
+                                    <i class="fas fa-paperclip"></i>
+                                    <p>No files attached</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Send Section -->
+                <section id="send" class="content-section">
+                    <div class="section-header">
+                        <h2>Launch Campaign</h2>
+                        <p>Advanced campaign preview and execution with real-time analytics</p>
+                    </div>
+
+                    <div class="launch-container">
+                        <!-- Advanced Campaign Preview -->
+                        <div class="campaign-preview">
+                            <h3>📋 Campaign Preview</h3>
+                            <div class="preview-grid">
+                                <div class="preview-section">
+                                    <h4>📧 Email Content</h4>
+                                    <div class="preview-email">
+                                        <div class="email-header">
+                                            <span class="preview-label">From:</span>
+                                            <span class="preview-value" id="previewFrom">-</span>
+                                        </div>
+                                        <div class="email-header">
+                                            <span class="preview-label">Subject:</span>
+                                            <span class="preview-value" id="previewSubjectLine">-</span>
+                                        </div>
+                                        <iframe class="email-body-preview" id="previewEmailBody" title="Final campaign email preview" sandbox="" referrerpolicy="no-referrer" srcdoc="<p>No content to preview</p>"></iframe>
+                                    </div>
+                                </div>
+                                
+                                <div class="preview-section">
+                                    <h4>👥 Recipients Summary</h4>
+                                    <div class="recipients-summary">
+                                        <div class="summary-stat">
+                                            <span class="stat-number" id="totalRecipientsCount">0</span>
+                                            <span class="stat-label">Total Recipients</span>
+                                        </div>
+                                        <div class="domain-breakdown" id="domainBreakdown">
+                                            <div class="empty-breakdown">No recipients loaded</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="preview-section">
+                                    <h4>🔄 SMTP Configuration</h4>
+                                    <div class="smtp-summary" id="smtpSummary">
+                                        <div class="empty-smtp">No SMTP servers configured</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="preview-section">
+                                    <h4>📎 Attachments</h4>
+                                    <div class="attachments-summary" id="attachmentsSummary">
+                                        <div class="summary-stat">
+                                            <span class="stat-number" id="attachmentsCount">0</span>
+                                            <span class="stat-label">Files Attached</span>
+                                        </div>
+                                        <div class="attachments-list" id="attachmentsList">
+                                            <div class="empty-attachments">No attachments</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Advanced Launch Options -->
+                        <div class="launch-options">
+                            <h3>🚀 Launch Options</h3>
+                            <div class="options-container">
+                                <div class="send-mode-options">
+                                    <label class="option-card">
+                                        <input type="radio" name="sendMode" value="dry_run" checked>
+                                        <div class="option-content">
+                                            <i class="fas fa-vial"></i>
+                                            <h4>🧪 Test Mode</h4>
+                                            <p>Simulate the entire sending process without actually sending emails</p>
+                                            
+                                        </div>
+                                    </label>
+                                    <label class="option-card">
+                                        <input type="radio" name="sendMode" value="live">
+                                        <div class="option-content">
+                                            <i class="fas fa-rocket"></i>
+                                            <h4>🔴 Live Send</h4>
+                                            <p>Send emails to all recipients using SMTP rotation</p>
+                                            
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <div class="advanced-options">
+                                    <h4>Advanced Settings</h4>
+                                    <div class="options-grid">
+                                        <div class="option-group">
+                                            <label for="batchSize">Batch Size</label>
+                                            <input type="number" id="batchSize" value="50" min="1" max="500">
+                                            <small>Process emails in batches</small>
+                                        </div>
+                                        <div class="option-group">
+                                            <label for="maxRetries">Max Retries</label>
+                                            <input type="number" id="maxRetries" value="3" min="1" max="10">
+                                            <small>Retry failed emails</small>
+                                        </div>
+                                        <div class="option-group">
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="enableAnalytics" checked>
+                                                <span class="checkmark"></span>
+                                                Enable Detailed Analytics
+                                            </label>
+                                        </div>
+                                        <div class="option-group">
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="pauseOnError">
+                                                <span class="checkmark"></span>
+                                                Pause on Critical Errors
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Launch Button -->
+                        <div class="launch-actions">
+                            <div class="launch-warning" id="launchWarning" style="display: none;">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <span>Complete all setup steps before launching</span>
+                            </div>
+                            <button class="btn btn-danger btn-large" id="launchBtn" disabled>
+                                <i class="fas fa-rocket"></i>
+                                <span>Launch Campaign</span>
+                            </button>
+                        </div>
+
+                        <!-- Real-time Progress Section -->
+                        <div class="progress-section" id="progressSection" style="display: none;">
+                            <h3>📊 Real-time Campaign Progress</h3>
+                            <div class="progress-dashboard">
+                                <div class="progress-stats-grid">
+                                    <div class="progress-stat">
+                                        <i class="fas fa-paper-plane"></i>
+                                        <div class="stat-content">
+                                            <span class="stat-number" id="sentCount">0</span>
+                                            <span class="stat-label">Sent</span>
+                                        </div>
+                                    </div>
+                                    <div class="progress-stat">
+                                        <i class="fas fa-exclamation-circle"></i>
+                                        <div class="stat-content">
+                                            <span class="stat-number" id="failedCount">0</span>
+                                            <span class="stat-label">Failed</span>
+                                        </div>
+                                    </div>
+                                    <div class="progress-stat">
+                                        <i class="fas fa-clock"></i>
+                                        <div class="stat-content">
+                                            <span class="stat-number" id="elapsedTime">0s</span>
+                                            <span class="stat-label">Elapsed</span>
+                                        </div>
+                                    </div>
+                                    <div class="progress-stat">
+                                        <i class="fas fa-sync-alt"></i>
+                                        <div class="stat-content">
+                                            <span class="stat-number" id="rotationCount">0</span>
+                                            <span class="stat-label">SMTP Rotations</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="progress-container">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="progressFill"></div>
+                                        <span class="progress-text" id="progressText">0%</span>
+                                    </div>
+                                    <div class="progress-details">
+                                        <span id="progressDetails">Initializing...</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="current-smtp-status">
+                                    <h4>Current SMTP Server</h4>
+                                    <div class="smtp-status-card" id="currentSmtpCard">
+                                        <div class="smtp-info">
+                                            <span class="smtp-name" id="currentSmtpName">-</span>
+                                            <span class="smtp-usage" id="currentSmtpUsage">0 emails sent</span>
+                                        </div>
+                                        <div class="smtp-indicator">
+                                            <span class="status-dot active"></span>
+                                            <span>Active</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="live-log-section">
+                                <div class="live-header">
+                                    <h4>📝 Live Activity</h4>
+                                    <div class="live-actions">
+                                        <button class="btn btn-secondary" id="pauseResumeBtn"><i class="fas fa-pause"></i> Pause Streaming</button>
+                                        <button class="btn btn-secondary" id="exportLiveCsvBtn" style="margin-bottom: 5px;"><i class="fas fa-file-csv"></i> Export CSV</button>
+                                        <button class="btn btn-secondary" id="clearLiveBtn" style="margin-bottom: 5px;"><i class="fas fa-broom"></i> Clear</button>
+                                    </div>
+                                </div>
+                                <div class="filter-chips" style="margin-bottom: 10px;">
+                                    <button class="filter-chip active" data-filter="all">All</button>
+                                    <button class="filter-chip" data-filter="sent">Sent</button>
+                                    <button class="filter-chip" data-filter="failed">Failed</button>
+                                </div>
+                                <div class="live-log" id="liveLog">
+                                    <div class="log-entry initial">
+                                        <span class="log-time">--:--:--</span>
+                                        <span class="log-message">Ready to start campaign...</span>
+                                    </div>
+                                </div>
+                                <div class="live-activity-table" style="margin-top: 12px;">
+                                    <div class="failed-recipients-table">
+                                        <table class="results-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Time</th>
+                                                    <th>Status</th>
+                                                    <th>Email</th>
+                                                    <th>Subject</th>
+                                                    <th>SMTP</th>
+                                                    <th>Details</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="liveActivityTable">
+                                                <!-- Populated dynamically -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Detailed Results Section -->
+                        <div class="results-section" id="resultsSection" style="display: none;">
+                            <h3>📈 Detailed Campaign Results</h3>
+                            <div class="results-dashboard">
+                                <div class="results-summary-grid">
+                                    <div class="result-card success">
+                                        <i class="fas fa-check-circle"></i>
+                                        <div class="result-content">
+                                            <span class="result-number" id="finalSentCount">0</span>
+                                            <span class="result-label">Accepted by SMTP</span>
+                                            <span class="result-percentage" id="successPercentage">0%</span>
+                                        </div>
+                                    </div>
+                                    <div class="result-card failed">
+                                        <i class="fas fa-times-circle"></i>
+                                        <div class="result-content">
+                                            <span class="result-number" id="finalFailedCount">0</span>
+                                            <span class="result-label">Failed</span>
+                                            <span class="result-percentage" id="failurePercentage">0%</span>
+                                        </div>
+                                    </div>
+                                    <div class="result-card duration">
+                                        <i class="fas fa-stopwatch"></i>
+                                        <div class="result-content">
+                                            <span class="result-number" id="campaignDuration">0s</span>
+                                            <span class="result-label">Total Duration</span>
+                                            <span class="result-rate" id="emailsPerMinute">0/min</span>
+                                        </div>
+                                    </div>
+                                    <div class="result-card smtp">
+                                        <i class="fas fa-server"></i>
+                                        <div class="result-content">
+                                            <span class="result-number" id="smtpServersUsed">0</span>
+                                            <span class="result-label">SMTP Servers Used</span>
+                                            <span class="result-rotations" id="totalRotations">0 rotations</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- SMTP Usage Breakdown -->
+                                <div class="smtp-usage-breakdown">
+                                    <h4>🔄 SMTP Server Usage</h4>
+                                    <div class="smtp-usage-grid" id="smtpUsageGrid">
+                                        <!-- Will be populated dynamically -->
+                                    </div>
+                                </div>
+                                
+                                <!-- Failed Recipients Details -->
+                                <div class="failed-recipients-section" id="failedRecipientsSection" style="display: none;">
+                                    <h4>❌ Failed Recipients</h4>
+                                    <div class="failed-recipients-table">
+                                        <table class="results-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Email</th>
+                                                    <th>Error Reason</th>
+                                                    <th>SMTP Server</th>
+                                                    <th>Timestamp</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="failedRecipientsTable">
+                                                <!-- Will be populated dynamically -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                
+                                <!-- Export Options -->
+                                <div class="export-options">
+                                    <h4>📥 Export Results</h4>
+                                    <div class="export-buttons">
+                                        <button class="btn btn-outline" id="exportCsvBtn">
+                                            <i class="fas fa-file-csv"></i>
+                                            Export to CSV
+                                        </button>
+                                        <button class="btn btn-outline" id="exportJsonBtn">
+                                            <i class="fas fa-file-code"></i>
+                                            Export to JSON
+                                        </button>
+                                        <button class="btn btn-outline" id="printReportBtn">
+                                            <i class="fas fa-print"></i>
+                                            Print Report
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compliance Modal -->
+    <div class="modal" id="complianceModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚠️ Email Compliance Notice</h2>
+            </div>
+            <div class="modal-body">
+                <p><strong>Before using TermSender Pro, please confirm:</strong></p>
+                <ul>
+                    <li>You have consent from all recipients to send emails</li>
+                    <li>Your emails comply with CAN-SPAM, GDPR, and local regulations</li>
+                    <li>You will include unsubscribe options in your emails</li>
+                    <li>You will respect rate limits and sending policies</li>
+                </ul>
+                <p><strong>Misuse of this tool may result in account suspension or legal consequences.</strong></p>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-danger" id="declineCompliance">I Do Not Agree</button>
+                <button class="btn btn-primary" id="acceptCompliance">I Understand and Agree</button>
+            </div>
+        </div>
+    </div></div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Processing...</p>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div class="notification-container" id="notificationContainer"></div>
+
+    <div class="modal" id="attachmentPreviewModal" style="display:none;">
+        <div class="modal-content attachment-preview-modal">
+            <div class="modal-header"><h3 id="attachmentPreviewTitle">Attachment preview</h3><button class="modal-close" id="closeAttachmentPreview" aria-label="Close preview"><i class="fas fa-times"></i></button></div>
+            <div class="modal-body"><iframe id="attachmentPreviewFrame" title="PDF attachment preview" sandbox="allow-same-origin" style="display:none;width:100%;height:70vh;border:0"></iframe><img id="attachmentPreviewImage" alt="Image attachment preview" style="display:none;max-width:100%;max-height:70vh;margin:auto"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

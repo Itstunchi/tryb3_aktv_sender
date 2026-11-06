@@ -1,4 +1,15 @@
 __pycache__/
-*.py[cod]
+.venv/
 state.json
+*.py[cod]
 .env
+uploads/*
+!uploads/.gitkeep
+logs/
+config/smtp_servers.json
+config/license_keys.json
+config/email_lists.json
+config/campaign_settings.json
+config/email_templates.json
+analytics/campaign_analytics.json
+*.log

@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TermSender Pro - License Management</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <div class="logo">
+            <i class="fas fa-paper-plane"></i>
+            <span>TermSender Pro - Admin</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="user-info">
+            <i class="fas fa-user"></i>
+            <span>{{ session.get('user_name', 'Admin') }}</span>
+          </div>
+          <a href="{{ url_for('index') }}" class="btn btn-secondary">
+            <i class="fas fa-home"></i>
+          </a>
+          <a href="{{ url_for('logout') }}" class="btn btn-secondary">
+            <i class="fas fa-sign-out-alt"></i>
+          </a>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main
+        class="main-content"
+        style="display: flex; justify-content: center; padding: 2rem"
+      >
+        <div class="section-container" style="max-width: 800px; width: 100%">
+          <div
+            class="section-header"
+            style="text-align: center; margin-bottom: 2rem"
+          >
+            <h2>License Key Management</h2>
+          </div>
+
+          <!-- Generate License Key Form -->
+          <div
+            class="card"
+            style="
+              margin-bottom: 2rem;
+              border-radius: 8px;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            "
+          >
+            <div
+              class="card-header"
+              style="
+                background-color: var(--bg-tertiary);
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                padding: 1rem 1.5rem;
+              "
+            >
+              <h3 style="margin: 0; color: var(--brand-primary)">
+                Generate New License Key
+              </h3>
+            </div>
+            <div class="card-body" style="padding: 1.5rem">
+              {% if new_key %}
+              <div
+                style="
+                  background-color: rgba(34, 197, 94, 0.1);
+                  border: 1px solid var(--brand-success);
+                  border-radius: 6px;
+                  padding: 1rem;
+                  margin-bottom: 1.5rem;
+                "
+              >
+                <p
+                  style="
+                    color: var(--brand-success);
+                    margin-bottom: 0.75rem;
+                    font-weight: 500;
+                  "
+                >
+                  New license key generated successfully:
+                </p>
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    background-color: var(--bg-tertiary);
+                    border-radius: 6px;
+                    padding: 0.75rem;
+                    gap: 0.5rem;
+                  "
+                >
+                  <code
+                    style="
+                      flex-grow: 1;
+                      font-family: monospace;
+                      font-size: 1rem;
+                      color: var(--text-accent);
+                    "
+                    >{{ new_key }}</code
+                  >
+                  <button
+                    style="
+                      background-color: var(--brand-primary);
+                      color: white;
+                      border: none;
+                      border-radius: 4px;
+                      padding: 0.5rem;
+                      cursor: pointer;
+                      transition: all 0.2s;
+                    "
+                    onclick="copyToClipboard('{{ new_key }}')"
+                  >
+                    <i class="fas fa-copy"></i>
+                  </button>
+                </div>
+              </div>
+              {% endif %}
+
+              <form
+                method="post"
+                action="{{ url_for('admin_generate_key') }}"
+                style="display: grid; gap: 1.25rem"
+              >
+                <div class="form-group" style="display: grid; gap: 0.5rem">
+                  <label
+                    for="user_email"
+                    style="font-weight: 500; color: var(--text-secondary)"
+                    >User Email</label
+                  >
+                  <input
+                    type="email"
+                    id="user_email"
+                    name="user_email"
+                    class="form-control"
+                    style="
+                      padding: 0.75rem;
+                      border-radius: 6px;
+                      background-color: var(--bg-input);
+                      border: 1px solid var(--border-color);
+                      color: var(--text-primary);
+                      transition: all 0.2s;
+                    "
+                    required
+                  />
+                </div>
+                <div class="form-group" style="display: grid; gap: 0.5rem">
+                  <label
+                    for="user_name"
+                    style="font-weight: 500; color: var(--text-secondary)"
+                    >User Name</label
+                  >
+                  <input
+                    type="text"
+                    id="user_name"
+                    name="user_name"
+                    class="form-control"
+                    style="
+                      padding: 0.75rem;
+                      border-radius: 6px;
+                      background-color: var(--bg-input);
+                      border: 1px solid var(--border-color);
+                      color: var(--text-primary);
+                      transition: all 0.2s;
+                    "
+                    required
+                  />
+                </div>
+                <div class="form-group" style="display: grid; gap: 0.5rem">
+                  <label
+                    for="expiry_days"
+                    style="font-weight: 500; color: var(--text-secondary)"
+                    >Expiry (days)</label
+                  >
+                  <input
+                    type="number"
+                    id="expiry_days"
+                    name="expiry_days"
+                    class="form-control"
+                    style="
+                      padding: 0.75rem;
+                      border-radius: 6px;
+                      background-color: var(--bg-input);
+                      border: 1px solid var(--border-color);
+                      color: var(--text-primary);
+                      transition: all 0.2s;
+                    "
+                    value="365"
+                    min="1"
+                    max="3650"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  class="btn btn-primary"
+                  style="
+                    padding: 0.75rem;
+                    border-radius: 6px;
+                    background-color: var(--brand-primary);
+                    border: none;
+                    color: white;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    margin-top: 0.5rem;
+                  "
+                >
+                  <i class="fas fa-key" style="margin-right: 0.5rem"></i>
+                  Generate Key
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- License Keys List -->
+          <div
+            class="card mt-4"
+            style="border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1)"
+          >
+            <div
+              class="card-header"
+              style="
+                background-color: var(--bg-tertiary);
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                padding: 1rem 1.5rem;
+              "
+            >
+              <h3 style="margin: 0; color: var(--brand-primary)">
+                Active License Keys
+              </h3>
+            </div>
+            <div class="card-body" style="padding: 1.5rem">
+              <div class="table-responsive">
+                <table
+                  class="table"
+                  style="width: 100%; border-collapse: collapse"
+                >
+                  <thead>
+                    <tr style="border-bottom: 1px solid var(--border-color)">
+                      <th
+                        style="
+                          padding: 0.75rem;
+                          text-align: left;
+                          color: var(--text-secondary);
+                        "
+                      >
+                        User
+                      </th>
+                      <th
+                        style="
+                          padding: 0.75rem;
+                          text-align: left;
+                          color: var(--text-secondary);
+                        "
+                      >
+                        Email
+                      </th>
+                      <th
+                        style="
+                          padding: 0.75rem;
+                          text-align: left;
+                          color: var(--text-secondary);
+                        "
+                      >
+                        Created
+                      </th>
+                      <th
+                        style="
+                          padding: 0.75rem;
+                          text-align: left;
+                          color: var(--text-secondary);
+                        "
+                      >
+                        Expires
+                      </th>
+                      <th
+                        style="
+                          padding: 0.75rem;
+                          text-align: left;
+                          color: var(--text-secondary);
+                        "
+                      >
+                        Last Login
+                      </th>
+                      <th
+                        style="
+                          padding: 0.75rem;
+                          text-align: left;
+                          color: var(--text-secondary);
+                        "
+                      >
+                        Status
+                      </th>
+                      <th
+                        style="
+                          padding: 0.75rem;
+                          text-align: left;
+                          color: var(--text-secondary);
+                        "
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for key in license_keys %}
+                    <tr
+                      style="
+                        border-bottom: 1px solid var(--border-color);
+                        transition: background-color 0.2s;
+                      "
+                      onmouseover="this.style.backgroundColor='var(--bg-tertiary)'"
+                      onmouseout="this.style.backgroundColor='transparent'"
+                    >
+                      <td style="padding: 0.75rem">{{ key.user_name }}</td>
+                      <td style="padding: 0.75rem">{{ key.user_email }}</td>
+                      <td style="padding: 0.75rem">{{ key.created_date }}</td>
+                      <td style="padding: 0.75rem">{{ key.expiry_date }}</td>
+                      <td style="padding: 0.75rem">
+                        {{ key.last_login|default('Never', true) }}
+                      </td>
+                      <td style="padding: 0.75rem">
+                        {% if key.is_active %}
+                        <span
+                          style="
+                            display: inline-block;
+                            padding: 0.25rem 0.5rem;
+                            border-radius: 4px;
+                            background-color: var(--brand-success);
+                            color: white;
+                            font-size: 0.75rem;
+                            font-weight: 500;
+                          "
+                          >Active</span
+                        >
+                        {% else %}
+                        <span
+                          style="
+                            display: inline-block;
+                            padding: 0.25rem 0.5rem;
+                            border-radius: 4px;
+                            background-color: var(--brand-danger);
+                            color: white;
+                            font-size: 0.75rem;
+                            font-weight: 500;
+                          "
+                          >Inactive</span
+                        >
+                        {% endif %}
+                      </td>
+                      <td style="padding: 0.75rem">
+                        <form
+                          method="post"
+                          action="{{ url_for('admin_deactivate_key') }}"
+                          style="display: inline"
+                        >
+                          <input
+                            type="hidden"
+                            name="user_email"
+                            value="{{ key.user_email }}"
+                          />
+                          <button
+                            type="submit"
+                            style="padding: 0.4rem 0.75rem; border-radius: 4px; background-color: {% if not key.is_active %}var(--bg-tertiary){% else %}var(--brand-danger){% endif %}; border: none; color: white; font-size: 0.8rem; font-weight: 500; cursor: {% if not key.is_active %}not-allowed{% else %}pointer{% endif %}; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.3rem;"
+                            {%
+                            if
+                            not
+                            key.is_active
+                            %}disabled{%
+                            endif
+                            %}
+                          >
+                            <i class="fas fa-ban"></i> Deactivate
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div
+      id="toast"
+      style="
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: var(--bg-card);
+        color: var(--text-primary);
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: var(--shadow-md);
+        display: none;
+        align-items: center;
+        gap: 0.75rem;
+        z-index: 1000;
+        min-width: 300px;
+        transition: all 0.3s ease;
+      "
+    >
+      <i
+        class="fas fa-check-circle"
+        style="color: var(--brand-success); font-size: 1.25rem"
+      ></i>
+      <div style="flex-grow: 1">
+        <div style="font-weight: 500; margin-bottom: 0.25rem">Success</div>
+        <div
+          id="toast-message"
+          style="font-size: 0.875rem; color: var(--text-secondary)"
+        ></div>
+      </div>
+      <button
+        onclick="hideToast()"
+        style="
+          background: none;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+        "
+      >
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <script>
+      function showToast(message) {
+        const toast = document.getElementById("toast");
+        const toastMessage = document.getElementById("toast-message");
+        toastMessage.textContent = message;
+        toast.style.display = "flex";
+
+        // Auto hide after 3 seconds
+        setTimeout(() => {
+          hideToast();
+        }, 3000);
+      }
+
+      function hideToast() {
+        const toast = document.getElementById("toast");
+        toast.style.opacity = "0";
+        setTimeout(() => {
+          toast.style.display = "none";
+          toast.style.opacity = "1";
+        }, 300);
+      }
+
+      function copyToClipboard(text) {
+        // Use modern clipboard API if available
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast("License key copied to clipboard!");
+          });
+        } else {
+          // Fallback for older browsers
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textarea);
+          showToast("License key copied to clipboard!");
+        }
+      }
+    </script>
+  </body>
+</html>
