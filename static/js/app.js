@@ -1637,6 +1637,11 @@ class TermSenderApp {
       return;
     }
 
+    if (!document.getElementById("consentConfirmed")?.checked) {
+      this.showNotification("Confirm that each selected person agreed to receive this message.", "error");
+      return;
+    }
+
     const sendModeElement = document.querySelector(
       'input[name="sendMode"]:checked'
     );
@@ -1685,6 +1690,7 @@ class TermSenderApp {
       batch_size: batchSize,
       max_retries: maxRetries,
       enable_analytics: enableAnalytics,
+      consent_confirmed: document.getElementById("consentConfirmed")?.checked === true,
     };
 
     try {

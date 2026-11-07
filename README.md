@@ -670,11 +670,21 @@ This working copy is based on the supplied TermSender Flask project. SMTP creden
 1. Create a virtual environment: `python -m venv .venv`
 2. Install dependencies: `.venv\\Scripts\\python -m pip install -r requirements.txt`
 3. Start the app: `.venv\\Scripts\\python launch.py --no-browser`
-4. Open <http://127.0.0.1:5000> and sign in with the one-time setup key supplied in the setup chat.
+4. Open <http://127.0.0.1:5000>. On first run, the generated admin email/password are written to `data/local-admin-credentials.txt` (this file is ignored by Git).
 
 The app binds to localhost by default. Keep SMTP passwords out of source control and use only recipient lists for people who agreed to receive your messages. A successful SMTP handoff means the server accepted the message; it does not prove inbox delivery. Delivery confirmation requires a provider event/webhook integration.
 
 The existing dark design is retained. Theme selection now switches the interface variables, the compose preview runs in a sandboxed frame, and image/PDF attachments can be previewed locally. Inline images use content IDs in HTML messages. Browser and email-client rendering can still differ.
 
-The sender remains a desktop prototype. Before sharing it with friends, the next priorities are a durable background job queue, provider-specific delivery webhooks, credential storage outside JSON, CSRF protection, consent/suppression management, and replacing SMTP rotation with provider-approved sending limits.
+SMTP credentials are stored per user and encrypted at rest. The encryption key must be backed up securely and must remain the same across deploys, or the app cannot decrypt saved SMTP settings. The sender uses every enabled SMTP account belonging to the signed-in user. Use provider-approved sending limits and send only to recipients who agreed to receive the message.
+
+## Deploy to Render
+
+The repository includes `render.yaml` for a single-instance Render web service with a persistent disk. In Render, choose **New → Blueprint**, connect this GitHub repository, and create the service from the blueprint. Enter `BOOTSTRAP_ADMIN_EMAIL` and a strong `BOOTSTRAP_ADMIN_PASSWORD` when Render prompts for them. The blueprint generates `SESSION_SECRET` and `TERMSENDER_ENCRYPTION_SECRET`, and mounts persistent application data at `/var/data`. Keep these secrets private and do not replace the encryption secret after users have saved SMTP accounts.
+
+This configuration uses a paid web service and persistent disk. Render's free web services lose local files on restarts and block outbound SMTP ports 25, 465, and 587; port 25 is blocked on all Render services. Use SMTP providers on a supported port such as 465 or 587, and confirm your provider allows sending from your account. (Render documentation: <https://render.com/docs/free>, <https://render.com/docs/disks>.)
+
+After the first deploy, sign in at `/login` with the bootstrap admin credentials and open `/admin`. Generate a license for the recipient's email and name, then give them the one-time key privately. They open `/register`, enter that matching email and key, and set their own password. They can then add their own SMTP accounts in the app. Remove the bootstrap email/password environment variables after the admin account has been created; the admin account remains in the database.
+
+Use a private GitHub repository for the app source. Never commit `.env`, `data/`, SMTP credentials, recipient lists, or issued license keys. The current background send queue is held in process memory, so an active send can be interrupted by a restart or deploy; durable job queuing and provider delivery webhooks are future reliability upgrades.
 

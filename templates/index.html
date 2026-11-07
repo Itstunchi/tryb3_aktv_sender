@@ -703,6 +703,11 @@
                                 <i class="fas fa-exclamation-triangle"></i>
                                 <span>Complete all setup steps before launching</span>
                             </div>
+                            <label class="checkbox-label" style="display:flex;gap:.65rem;align-items:flex-start;margin:1rem 0">
+                                <input type="checkbox" id="consentConfirmed">
+                                <span class="checkmark"></span>
+                                <span>I confirmed that each selected person agreed to receive this message.</span>
+                            </label>
                             <button class="btn btn-danger btn-large" id="launchBtn" disabled>
                                 <i class="fas fa-rocket"></i>
                                 <span>Launch Campaign</span>
@@ -946,6 +951,19 @@
         </div>
     </div>
 
+    <script>
+      window.csrfToken = {{ csrf_token_value|tojson }};
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (input, init = {}) => {
+        const method = (init.method || "GET").toUpperCase();
+        if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+          const headers = new Headers(init.headers || {});
+          headers.set("X-CSRF-Token", window.csrfToken);
+          init = { ...init, headers };
+        }
+        return originalFetch(input, init);
+      };
+    </script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

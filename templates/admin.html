@@ -138,6 +138,7 @@
                 action="{{ url_for('admin_generate_key') }}"
                 style="display: grid; gap: 1.25rem"
               >
+                <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}" />
                 <div class="form-group" style="display: grid; gap: 0.5rem">
                   <label
                     for="user_email"
@@ -372,6 +373,7 @@
                           action="{{ url_for('admin_deactivate_key') }}"
                           style="display: inline"
                         >
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}" />
                           <input
                             type="hidden"
                             name="user_email"

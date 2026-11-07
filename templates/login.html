@@ -98,15 +98,18 @@
         {% endif %}
 
         <form class="login-form" method="post" action="{{ url_for('login') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}" />
           <input
-            type="text"
-            name="license_key"
+            type="email"
+            name="email"
             class="login-input"
-            placeholder="Enter License Key"
+            placeholder="Email address"
             required
           />
-          <button type="submit" class="login-button">Activate</button>
+          <input type="password" name="password" class="login-input" placeholder="Password" autocomplete="current-password" required />
+          <button type="submit" class="login-button">Sign in</button>
         </form>
+        <p style="text-align:center;margin-top:1rem;color:var(--text-secondary)">Have a license? <a href="{{ url_for('register') }}">Create your account</a></p>
       </div>
     </div>
   </body>

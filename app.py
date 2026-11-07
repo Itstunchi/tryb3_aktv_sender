@@ -21,7 +21,7 @@ import mimetypes
 import copy
 import csv
 
-from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash, abort, g
 from werkzeug.utils import secure_filename
 from email_validator import validate_email, EmailNotValidError
 from email.mime.text import MIMEText
@@ -32,10 +32,15 @@ from email import encoders
 # Import our enhanced classes
 from config_manager import config_manager
 from termsender import SMTPRotationManager, AnalyticsManager, SMTPServer
-from auth_manager import auth_manager
+from account_store import store as account_store, DATA_DIR
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SESSION_SECRET') or secrets.token_urlsafe(32)
+if os.environ.get('APP_ENV') == 'production' and not os.environ.get('SESSION_SECRET'):
+    raise RuntimeError('SESSION_SECRET is required in production')
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax',
+                  SESSION_COOKIE_SECURE=os.environ.get('APP_ENV') == 'production',
+                  PERMANENT_SESSION_LIFETIME=timedelta(hours=8))
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 
 # Configuration
@@ -44,6 +49,33 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 ALLOWED_EXTENSIONS = {'txt', 'csv', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'doc', 'docx'}
 SEND_JOBS = {}
 SEND_JOBS_LOCK = threading.Lock()
+
+
+@app.before_request
+def protect_csrf():
+    if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
+        expected = session.get('csrf_token', '')
+        supplied = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token', '')
+        if not expected or not secrets.compare_digest(expected, supplied):
+            return jsonify({'success': False, 'message': 'Security token expired. Refresh and try again.'}), 400
+
+
+@app.context_processor
+def inject_csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_urlsafe(32)
+    return {'csrf_token_value': session['csrf_token']}
+
+
+@app.after_request
+def security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'same-origin'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    if request.endpoint not in {'static'}:
+        response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 def _run_send_job(job_id, sender, content, recipients, attachments, dry_run, delay_between_emails):
@@ -71,6 +103,16 @@ def _run_send_job(job_id, sender, content, recipients, attachments, dry_run, del
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def user_upload_folder(user_id):
+    path = DATA_DIR / 'uploads' / str(int(user_id))
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def user_analytics_file(user_id):
+    path = DATA_DIR / 'users' / str(int(user_id)) / 'analytics' / 'campaign_analytics.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
 def validate_email_address(email):
     """Validate email address"""
     try:
@@ -82,7 +124,7 @@ def validate_email_address(email):
 class WebEmailSender:
     """Web-optimized email sender with SMTP rotation"""
 
-    def __init__(self, smtp_configs: List[dict], rotation_mode: str = "email_count", rotation_value: int = 10):
+    def __init__(self, smtp_configs: List[dict], rotation_mode: str = "email_count", rotation_value: int = 10, analytics_file=None):
         # Convert dicts to SMTPServer objects
         smtp_servers = []
         for config in smtp_configs:
@@ -100,7 +142,7 @@ class WebEmailSender:
             smtp_servers.append(server)
         
         self.smtp_manager = SMTPRotationManager(smtp_servers, rotation_mode, rotation_value)
-        self.analytics = AnalyticsManager()
+        self.analytics = AnalyticsManager(analytics_file=analytics_file)
 
     def send_emails_async(self, content: dict, recipients: List[str], attachments: List[str] = None, 
                          dry_run: bool = False, progress_callback=None, delay_between_emails: float = 1.0):
@@ -280,33 +322,63 @@ class WebEmailSender:
 def login_required(f):
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        if not auth_manager.is_authenticated():
+        user = account_store.user(session.get('user_id'))
+        if not user:
+            session.clear()
             return redirect(url_for('login'))
+        g.user = user
         return f(*args, **kwargs)
     return decorated_function
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page for license key authentication"""
-    if auth_manager.is_authenticated():
+    """Sign in to an activated account."""
+    if account_store.user(session.get('user_id')):
         return redirect(url_for('index'))
-    
     error = None
     if request.method == 'POST':
-        license_key = request.form.get('license_key')
-        if license_key:
-            success, message = auth_manager.validate_key(license_key)
-            if success:
-                return redirect(url_for('index'))
-            else:
-                error = message
-    
+        user = account_store.login(request.form.get('email', ''), request.form.get('password', ''))
+        if user:
+            session.clear()
+            session.permanent = True
+            session['user_id'] = user['id']
+            session['user_email'] = user['email']
+            session['user_name'] = user['name']
+            session['is_admin'] = bool(user['is_admin'])
+            session['csrf_token'] = secrets.token_urlsafe(32)
+            return redirect(url_for('index'))
+        error = 'Email or password was not recognized.'
     return render_template('login.html', error=error)
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    error = None
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        name = request.form.get('name', '').strip()
+        password = request.form.get('password', '')
+        if len(password) < 12:
+            error = 'Use a password with at least 12 characters.'
+        elif len(email) > 254 or not name or len(name) > 100:
+            error = 'Enter a valid email and name.'
+        else:
+            user, error = account_store.activate(email, name, password, request.form.get('license_key', ''))
+            if user:
+                session.clear()
+                session.permanent = True
+                session['user_id'] = user['id']
+                session['user_email'] = user['email']
+                session['user_name'] = user['name']
+                session['is_admin'] = False
+                session['csrf_token'] = secrets.token_urlsafe(32)
+                return redirect(url_for('index'))
+    return render_template('register.html', error=error)
 
 @app.route('/logout')
 def logout():
     """Logout and clear session"""
-    auth_manager.logout()
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/admin', methods=['GET'])
@@ -314,10 +386,10 @@ def logout():
 def admin():
     """Admin page for license key management"""
     # Only allow access if user is admin
-    if session.get('user_email') != 'admin@example.com':
+    if not session.get('is_admin'):
         return redirect(url_for('index'))
     
-    license_keys = auth_manager.get_all_keys()
+    license_keys = account_store.licenses()
     return render_template('admin.html', license_keys=license_keys)
 
 @app.route('/admin/generate-key', methods=['POST'])
@@ -325,15 +397,15 @@ def admin():
 def admin_generate_key():
     """Generate a new license key"""
     # Only allow access if user is admin
-    if session.get('user_email') != 'admin@example.com':
+    if not session.get('is_admin'):
         return redirect(url_for('index'))
     
     user_email = request.form.get('user_email')
     user_name = request.form.get('user_name')
     expiry_days = int(request.form.get('expiry_days', 365))
     
-    new_key = auth_manager.generate_key(user_email, user_name, expiry_days)
-    license_keys = auth_manager.get_all_keys()
+    new_key = account_store.issue(user_email, user_name, expiry_days)
+    license_keys = account_store.licenses()
     
     return render_template('admin.html', license_keys=license_keys, new_key=new_key)
 
@@ -342,23 +414,33 @@ def admin_generate_key():
 def admin_deactivate_key():
     """Deactivate a license key"""
     # Only allow access if user is admin
-    if session.get('user_email') != 'admin@example.com':
+    if not session.get('is_admin'):
         return redirect(url_for('index'))
     
     user_email = request.form.get('user_email')
-    auth_manager.deactivate_key(user_email)
+    account_store.revoke(user_email)
     
-    license_keys = auth_manager.get_all_keys()
+    license_keys = account_store.licenses()
     return render_template('admin.html', license_keys=license_keys)
 
 @app.route('/')
 @login_required
 def index():
     """Main dashboard with enhanced analytics"""
-    system_status = config_manager.get_system_status()
-    
+    user_id = g.user['id']
+    smtp = account_store.get_config(user_id, 'smtp_servers', {'smtp_servers': []}).get('smtp_servers', [])
+    lists = account_store.get_config(user_id, 'email_lists', {'email_lists': {'default': []}}).get('email_lists', {})
+    templates = account_store.get_config(user_id, 'templates', {'email_templates': {'default': {}}}).get('email_templates', {})
+    campaigns_cfg = account_store.get_config(user_id, 'campaigns', {'campaigns': {}}).get('campaigns', {})
+    system_status = {
+        'smtp_configured': any(s.get('enabled') for s in smtp),
+        'total_smtp_servers': len(smtp),
+        'total_recipients': sum(len(v) for v in lists.values()),
+        'total_templates': len(templates),
+        'total_campaigns': len(campaigns_cfg),
+    }
     # Load recent analytics
-    analytics_file = Path("analytics/campaign_analytics.json")
+    analytics_file = user_analytics_file(user_id)
     recent_campaigns = []
     if analytics_file.exists():
         with open(analytics_file, 'r') as f:
@@ -367,6 +449,11 @@ def index():
     
     system_status['recent_campaigns'] = recent_campaigns
     return render_template('index.html', system_status=system_status)
+
+@app.route('/healthz', methods=['GET'])
+def healthz():
+    """Unauthenticated health endpoint for the hosting platform."""
+    return {"status": "ok"}, 200
 
 @app.route('/api/test-smtp', methods=['POST'])
 @login_required
@@ -460,9 +547,10 @@ def send_emails():
             return jsonify({"success": False, "message": "No data provided"})
 
         # Validate required data
-        smtp_configs = data.get('smtp_configs', [])
+        smtp_configs = account_store.get_config(g.user['id'], 'smtp_servers', {'smtp_servers': []}).get('smtp_servers', [])
         content = data.get('content')
-        recipients = data.get('recipients', [])
+        stored_lists = account_store.get_config(g.user['id'], 'email_lists', {'email_lists': {'default': []}}).get('email_lists', {})
+        recipients = [recipient for group in stored_lists.values() for recipient in group]
         attachments = data.get('attachments', [])
         dry_run = data.get('dry_run', True)
         
@@ -477,6 +565,12 @@ def send_emails():
         max_retries = data.get('max_retries', 3)
 
         # Detailed validation
+        if data.get('consent_confirmed') is not True:
+            return jsonify({"success": False, "message": "Confirm that every recipient agreed to receive this message."}), 400
+        if not recipients or len(recipients) > 50:
+            return jsonify({"success": False, "message": "Choose 1 to 50 saved, consented recipients for a personal send."}), 400
+        if not all(isinstance(r, dict) and validate_email_address(str(r.get('email', ''))) for r in recipients):
+            return jsonify({"success": False, "message": "Saved recipient list contains an invalid email address."}), 400
         if not smtp_configs:
             return jsonify({"success": False, "message": "No SMTP servers configured"})
         
@@ -486,13 +580,17 @@ def send_emails():
         if not recipients:
             return jsonify({"success": False, "message": "No recipients provided"})
 
-        # Filter enabled SMTP servers
+        # Filter enabled SMTP servers and let the configured rotation strategy
+        # select among all of this user's accounts.
+        # Each account belongs to the signed-in user. Pass all enabled accounts
+        # to the existing rotation manager so users can use any number of their
+        # own SMTP providers/accounts; do not silently restrict sends to one.
         enabled_configs = [config for config in smtp_configs if config.get('enabled', True)]
         if not enabled_configs:
             return jsonify({"success": False, "message": "No enabled SMTP servers found"})
 
         # Create sender with rotation
-        sender = WebEmailSender(enabled_configs, rotation_mode, rotation_value)
+        sender = WebEmailSender(enabled_configs, rotation_mode, rotation_value, analytics_file=user_analytics_file(g.user['id']))
 
         # Prepare attachment paths
         attachment_paths = []
@@ -506,8 +604,8 @@ def send_emails():
                 continue
             if not stored_name.startswith(attachment_id + '_'):
                 continue
-            file_path = (UPLOAD_FOLDER / stored_name).resolve()
-            if file_path.parent == UPLOAD_FOLDER.resolve() and file_path.is_file():
+            file_path = (user_upload_folder(g.user['id']) / stored_name).resolve()
+            if file_path.parent == user_upload_folder(g.user['id']).resolve() and file_path.is_file():
                 attachment_paths.append({
                     'id': attachment_id,
                     'inline': bool(attachment.get('inline')),
@@ -522,7 +620,7 @@ def send_emails():
                         SEND_JOBS.pop(old_id, None)
                     if len(SEND_JOBS) < 40:
                         break
-            SEND_JOBS[job_id] = {"status": "running", "results": None, "error": None}
+            SEND_JOBS[job_id] = {"status": "running", "results": None, "error": None, "user_id": g.user['id']}
         threading.Thread(
             target=_run_send_job,
             args=(job_id, sender, content, [r['email'] for r in recipients], attachment_paths, dry_run, delay_between_emails),
@@ -547,7 +645,7 @@ def send_status(job_id):
         return jsonify({"success": False, "message": "Invalid job ID"}), 400
     with SEND_JOBS_LOCK:
         job = SEND_JOBS.get(safe_id)
-        if not job:
+        if not job or job.get('user_id') != g.user['id']:
             return jsonify({"success": False, "message": "Campaign job not found"}), 404
         return jsonify({"success": True, **copy.deepcopy(job)})
 
@@ -556,7 +654,7 @@ def send_status(job_id):
 def get_analytics():
     """Get comprehensive analytics data"""
     try:
-        analytics_file = Path("analytics/campaign_analytics.json")
+        analytics_file = user_analytics_file(g.user['id'])
         
         if not analytics_file.exists():
             return jsonify({
@@ -611,7 +709,7 @@ def get_analytics():
 def get_smtp_servers():
     """Get configured SMTP servers"""
     try:
-        smtp_servers = config_manager.get_smtp_servers()
+        smtp_servers = account_store.get_config(g.user['id'], 'smtp_servers', {'smtp_servers': []}).get('smtp_servers', [])
         return jsonify({
             "success": True,
             "smtp_servers": smtp_servers
@@ -629,7 +727,9 @@ def save_smtp_servers():
             return jsonify({"success": False, "message": "No SMTP servers data provided"})
         
         # Update the configuration file
-        config_manager._save_config(config_manager.smtp_file, data)
+        if not isinstance(data.get('smtp_servers'), list):
+            return jsonify({"success": False, "message": "SMTP server list must be an array"}), 400
+        account_store.save_config(g.user['id'], 'smtp_servers', data, secret=True)
         
         return jsonify({
             "success": True,
@@ -643,7 +743,7 @@ def save_smtp_servers():
 def get_email_lists():
     """Get available email lists"""
     try:
-        email_lists = config_manager.get_email_lists()
+        email_lists = account_store.get_config(g.user['id'], 'email_lists', {'email_lists': {'default': []}}).get('email_lists', {})
         return jsonify({
             "success": True,
             "email_lists": email_lists
@@ -661,7 +761,7 @@ def save_email_lists():
             return jsonify({"success": False, "message": "No email lists data provided"})
         
         # Update the configuration file
-        config_manager._save_config(config_manager.lists_file, data)
+        account_store.save_config(g.user['id'], 'email_lists', data)
         
         return jsonify({
             "success": True,
@@ -675,7 +775,7 @@ def save_email_lists():
 def get_templates():
     """Get email templates"""
     try:
-        templates = config_manager.get_email_templates()
+        templates = account_store.get_config(g.user['id'], 'templates', {'email_templates': {'default': {}}}).get('email_templates', {})
         return jsonify({
             "success": True,
             "templates": templates
@@ -693,7 +793,7 @@ def save_templates():
             return jsonify({"success": False, "message": "No templates data provided"})
         
         # Update the configuration file
-        config_manager._save_config(config_manager.templates_file, data)
+        account_store.save_config(g.user['id'], 'templates', data)
         
         return jsonify({
             "success": True,
@@ -716,7 +816,7 @@ def upload_csv():
 
         if file and file.filename and allowed_file(file.filename):
             filename = secure_filename(file.filename)
-            filepath = UPLOAD_FOLDER / filename
+            filepath = user_upload_folder(g.user['id']) / filename
             file.save(filepath)
 
             # Process CSV with enhanced validation
@@ -787,7 +887,7 @@ def upload_attachment():
             file_id = str(uuid.uuid4())
             filename = secure_filename(file.filename)
             new_filename = f"{file_id}_{filename}"
-            filepath = UPLOAD_FOLDER / new_filename
+            filepath = user_upload_folder(g.user['id']) / new_filename
             file.save(filepath)
 
             file_info = {
@@ -825,7 +925,7 @@ def cleanup_files():
                 safe_id = str(uuid.UUID(str(file_id)))
             except (ValueError, TypeError, AttributeError):
                 continue
-            for file_path in UPLOAD_FOLDER.glob(f"{safe_id}_*"):
+            for file_path in user_upload_folder(g.user['id']).glob(f"{safe_id}_*"):
                 if file_path.exists():
                     os.remove(file_path)
 
@@ -839,7 +939,7 @@ def cleanup_files():
 def get_campaigns():
     """Get campaign configurations"""
     try:
-        campaigns = config_manager.get_campaigns()
+        campaigns = account_store.get_config(g.user['id'], 'campaigns', {'campaigns': {}}).get('campaigns', {})
         return jsonify({
             "success": True,
             "campaigns": campaigns
@@ -857,11 +957,7 @@ def save_campaigns():
             return jsonify({"success": False, "message": "No campaigns data provided"})
         
         # Load existing config and update campaigns
-        config = config_manager._load_config(config_manager.campaigns_file)
-        config['campaigns'] = data['campaigns']
-        
-        # Update the configuration file
-        config_manager._save_config(config_manager.campaigns_file, config)
+        account_store.save_config(g.user['id'], 'campaigns', {'campaigns': data['campaigns']})
         
         return jsonify({
             "success": True,

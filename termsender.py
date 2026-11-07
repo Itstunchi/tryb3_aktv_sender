@@ -192,8 +192,8 @@ class SMTPRotationManager:
 class AnalyticsManager:
     """Advanced analytics and reporting"""
     
-    def __init__(self):
-        self.analytics_file = ANALYTICS_DIR / "campaign_analytics.json"
+    def __init__(self, analytics_file=None):
+        self.analytics_file = Path(analytics_file) if analytics_file else ANALYTICS_DIR / "campaign_analytics.json"
         self.current_stats: Optional[CampaignStats] = None
     
     def start_campaign(self, campaign_id: str, total_recipients: int) -> CampaignStats:
