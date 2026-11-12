@@ -1,5 +1,6 @@
 """SQLite account store with invite licenses and encrypted per-user settings."""
 import base64, hashlib, json, os, secrets, sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from cryptography.fernet import Fernet
@@ -9,12 +10,20 @@ DATA_DIR = Path(os.environ.get("TERMSENDER_DATA_DIR", "data")).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "termsender.sqlite3"
 
+@contextmanager
 def _db():
     c = sqlite3.connect(DB_PATH, timeout=30)
     c.row_factory = sqlite3.Row
-    c.execute("PRAGMA foreign_keys=ON")
-    c.execute("PRAGMA journal_mode=WAL")
-    return c
+    try:
+        c.execute("PRAGMA foreign_keys=ON")
+        c.execute("PRAGMA journal_mode=WAL")
+        yield c
+        c.commit()
+    except Exception:
+        c.rollback()
+        raise
+    finally:
+        c.close()
 
 def _fernet():
     secret = os.environ.get("TERMSENDER_ENCRYPTION_SECRET")
@@ -35,6 +44,7 @@ class AccountStore:
             CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,email TEXT UNIQUE COLLATE NOCASE,name TEXT NOT NULL,password_hash TEXT NOT NULL,is_admin INTEGER NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,last_login TEXT);
             CREATE TABLE IF NOT EXISTS licenses(id INTEGER PRIMARY KEY,key_hash TEXT UNIQUE,email TEXT NOT NULL COLLATE NOCASE,name TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,redeemed_by INTEGER REFERENCES users(id),redeemed_at TEXT);
             CREATE TABLE IF NOT EXISTS user_configs(user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,name TEXT NOT NULL,value BLOB NOT NULL,encrypted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,name));
+            CREATE TABLE IF NOT EXISTS password_reset_codes(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,code_hash TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0);
             """)
         self.bootstrap_admin()
 
@@ -65,6 +75,37 @@ class AccountStore:
             if not r or not check_password_hash(r["password_hash"],password): return None
             c.execute("UPDATE users SET last_login=? WHERE id=?",(datetime.now(timezone.utc).isoformat(),r["id"]))
         return self.user(r["id"])
+
+    def issue_admin_password_reset(self,email,code,expires_at):
+        now=datetime.now(timezone.utc)
+        with _db() as c:
+            user=c.execute("SELECT id,is_admin FROM users WHERE email=? COLLATE NOCASE AND active=1",(email.strip(),)).fetchone()
+            if not user or not user["is_admin"]: return False
+            previous=c.execute("SELECT created_at FROM password_reset_codes WHERE user_id=?",(user["id"],)).fetchone()
+            if previous and now-datetime.fromisoformat(previous["created_at"])<timedelta(seconds=60): return False
+            c.execute("INSERT INTO password_reset_codes(user_id,code_hash,created_at,expires_at,attempts) VALUES(?,?,?,?,0) ON CONFLICT(user_id) DO UPDATE SET code_hash=excluded.code_hash,created_at=excluded.created_at,expires_at=excluded.expires_at,attempts=0",(user["id"],hashlib.sha256(code.encode()).hexdigest(),now.isoformat(),expires_at))
+        return True
+
+    def clear_admin_password_reset(self,email,code):
+        code_hash=hashlib.sha256(code.encode()).hexdigest()
+        with _db() as c:
+            c.execute("DELETE FROM password_reset_codes WHERE user_id=(SELECT id FROM users WHERE email=? COLLATE NOCASE AND is_admin=1) AND code_hash=?",(email.strip(),code_hash))
+
+    def reset_admin_password(self,email,code,password):
+        now=datetime.now(timezone.utc)
+        code_hash=hashlib.sha256(code.encode()).hexdigest()
+        with _db() as c:
+            row=c.execute("SELECT u.id,r.code_hash,r.expires_at,r.attempts FROM users u JOIN password_reset_codes r ON r.user_id=u.id WHERE u.email=? COLLATE NOCASE AND u.is_admin=1 AND u.active=1",(email.strip(),)).fetchone()
+            if not row or row["attempts"]>=5: return False
+            if datetime.fromisoformat(row["expires_at"])<=now:
+                c.execute("DELETE FROM password_reset_codes WHERE user_id=?",(row["id"],))
+                return False
+            if not secrets.compare_digest(row["code_hash"],code_hash):
+                c.execute("UPDATE password_reset_codes SET attempts=attempts+1 WHERE user_id=?",(row["id"],))
+                return False
+            c.execute("UPDATE users SET password_hash=? WHERE id=?",(generate_password_hash(password),row["id"]))
+            c.execute("DELETE FROM password_reset_codes WHERE user_id=?",(row["id"],))
+        return True
 
     def activate(self,email,name,password,key):
         now=datetime.now(timezone.utc)

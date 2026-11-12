@@ -10,7 +10,7 @@ import json
 import smtplib
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Dict, Optional
 import tempfile
@@ -35,6 +35,7 @@ from termsender import SMTPRotationManager, AnalyticsManager, SMTPServer
 from account_store import store as account_store, DATA_DIR
 
 app = Flask(__name__)
+ADMIN_RECOVERY_EMAIL = 'xexplatform@gmail.com'
 app.secret_key = os.environ.get('SESSION_SECRET') or secrets.token_urlsafe(32)
 if os.environ.get('APP_ENV') == 'production' and not os.environ.get('SESSION_SECRET'):
     raise RuntimeError('SESSION_SECRET is required in production')
@@ -349,6 +350,88 @@ def login():
             return redirect(url_for('index'))
         error = 'Email or password was not recognized.'
     return render_template('login.html', error=error)
+
+
+def _send_admin_reset_code(account_email, code):
+    server_config = next(
+        (
+            server for server in config_manager.get_smtp_servers()
+            if server.get('enabled')
+            and server.get('sender_email', '').strip().lower() == ADMIN_RECOVERY_EMAIL
+        ),
+        None,
+    )
+    if not server_config:
+        raise RuntimeError('No enabled SMTP server is configured for the recovery mailbox.')
+
+    host = server_config.get('host')
+    port = server_config.get('port')
+    username = server_config.get('username')
+    password = server_config.get('password')
+    if not host or not port or not username or not password:
+        raise RuntimeError('The recovery SMTP server configuration is incomplete.')
+
+    message = MIMEText(
+        f'Your TermSender administrator password reset code is {code}. '
+        f'It expires in 10 minutes and applies to {account_email}.',
+        'plain',
+    )
+    message['Subject'] = 'TermSender password reset code'
+    message['From'] = ADMIN_RECOVERY_EMAIL
+    message['To'] = ADMIN_RECOVERY_EMAIL
+
+    try:
+        if server_config.get('use_ssl'):
+            connection = smtplib.SMTP_SSL(host, int(port), timeout=20)
+        else:
+            connection = smtplib.SMTP(host, int(port), timeout=20)
+        with connection as smtp:
+            if server_config.get('use_tls') and not server_config.get('use_ssl'):
+                smtp.starttls()
+            smtp.login(username, password)
+            refused = smtp.send_message(message)
+            if refused:
+                raise smtplib.SMTPRecipientsRefused(refused)
+    except (OSError, smtplib.SMTPException, ValueError) as exc:
+        raise RuntimeError('The recovery email could not be delivered.') from exc
+
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    message = None
+    error = None
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        code = f'{secrets.randbelow(1_000_000):06d}'
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+        if account_store.issue_admin_password_reset(email, code, expires_at):
+            try:
+                _send_admin_reset_code(email, code)
+            except RuntimeError:
+                account_store.clear_admin_password_reset(email, code)
+                app.logger.exception('Failed to deliver administrator password reset email')
+                error = 'Could not send a recovery code. Check the recovery email SMTP settings and try again.'
+            else:
+                message = 'If this is the administrator account, a code was sent to the recovery mailbox.'
+        else:
+            message = 'If this is the administrator account, a code was sent to the recovery mailbox.'
+    return render_template('forgot_password.html', message=message, error=error)
+
+
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    error = None
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        code = request.form.get('code', '').strip()
+        password = request.form.get('password', '')
+        if len(password) < 12:
+            error = 'Use a password with at least 12 characters.'
+        elif not account_store.reset_admin_password(email, code, password):
+            error = 'The code is invalid or expired. Request a new code and try again.'
+        else:
+            return render_template('login.html', error=None, message='Password updated. Sign in with your new password.')
+    return render_template('reset_password.html', error=error)
 
 
 @app.route('/register', methods=['GET', 'POST'])

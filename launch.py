@@ -78,6 +78,10 @@ def run_cli_command(command: str, **kwargs):
 
 def main():
     """Enhanced main launcher function"""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+
     parser = argparse.ArgumentParser(
         description="TermSender Pro - Advanced Email Campaign Manager with SMTP Rotation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -136,8 +140,8 @@ Advanced CLI Options:
                           help='Run CLI command: send, campaign, analytics, config, version')
 
     # Web UI options
-    parser.add_argument('--host', default='0.0.0.0',
-                       help='Host to bind web server (default: 0.0.0.0)')
+    parser.add_argument('--host', default='127.0.0.1',
+                       help='Host to bind web server (default: 127.0.0.1)')
     parser.add_argument('--port', type=int, default=5000,
                        help='Port for web server (default: 5000)')
     parser.add_argument('--no-browser', action='store_true',

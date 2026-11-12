@@ -672,6 +672,8 @@ This working copy is based on the supplied TermSender Flask project. SMTP creden
 3. Start the app: `.venv\\Scripts\\python launch.py --no-browser`
 4. Open <http://127.0.0.1:5000>. On first run, the generated admin email/password are written to `data/local-admin-credentials.txt` (this file is ignored by Git).
 
+Use **Forgot your password?** on the sign-in page to recover the administrator password. Reset codes are delivered only to `xexplatform@gmail.com` using its enabled SMTP configuration, expire after 10 minutes, and are limited to one request per minute and five verification attempts. The account email shown in `data/local-admin-credentials.txt` is still the sign-in email.
+
 The app binds to localhost by default. Keep SMTP passwords out of source control and use only recipient lists for people who agreed to receive your messages. A successful SMTP handoff means the server accepted the message; it does not prove inbox delivery. Delivery confirmation requires a provider event/webhook integration.
 
 The existing dark design is retained. Theme selection now switches the interface variables, the compose preview runs in a sandboxed frame, and image/PDF attachments can be previewed locally. Inline images use content IDs in HTML messages. Browser and email-client rendering can still differ.
